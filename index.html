@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Social Media Scheduler — Demo</title>
+<style>
+  :root{--bg:#f6f8fb;--card:#fff;--accent:#0b74de;--muted:#6b7280}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,Arial;background:var(--bg);color:#111}
+  .wrap{max-width:1100px;margin:28px auto;padding:16px}
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+  h1{font-size:20px;margin:0}
+  .grid{display:grid;grid-template-columns:360px 1fr;gap:18px}
+  .card{background:var(--card);padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(10,10,10,.04);border:1px solid #eef2f7}
+  label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  input[type="text"], input[type="datetime-local"], textarea, select{width:100%;padding:10px;border-radius:8px;border:1px solid #e6e9ee;font-size:14px}
+  textarea{min-height:120px;resize:vertical}
+  .btn{background:var(--accent);color:#fff;padding:10px 12px;border-radius:10px;border:0;cursor:pointer}
+  .btn-ghost{background:transparent;border:1px solid #e6e9ee;color:#111;padding:8px 10px;border-radius:8px;cursor:pointer}
+  .accounts{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .acct{padding:8px 10px;border-radius:8px;background:#f3f6fb;border:1px solid #e7eefb;font-size:13px}
+  .small{font-size:13px;color:var(--muted)}
+  .queue-list{display:flex;flex-direction:column;gap:10px}
+  .post-item{display:flex;gap:10px;align-items:flex-start;border-radius:10px;padding:10px;border:1px solid #f0f3f7}
+  .post-meta{flex:1}
+  .post-controls{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+  .chip{font-size:12px;padding:6px 8px;border-radius:999px;background:#f3f5f8;border:1px solid #e7ecf3}
+  .row{display:flex;gap:8px;align-items:center}
+  .right{display:flex;gap:8px;align-items:center}
+  footer{margin-top:18px;text-align:center;color:var(--muted);font-size:13px}
+  @media (max-width:900px){ .grid{grid-template-columns:1fr} .wrap{padding:10px} }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Social Media Scheduler — Demo</h1>
+      <div class="small">Demo lokal • Tidak terhubung ke platform</div>
+    </header>
+
+    <div class="grid">
+      <!-- Sidebar: Compose -->
+      <section class="card">
+        <h3 style="margin:0 0 8px">Buat & Jadwalkan Post</h3>
+
+        <div style="margin-bottom:10px">
+          <label>Akun (mock)</label>
+          <div class="accounts" id="accounts">
+            <!-- akun terisi oleh JS -->
+          </div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <input id="newAccountName" type="text" placeholder="Nama akun (mis. @brandku)" />
+            <button id="addAccount" class="btn-ghost">Tambah</button>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label>Platform</label>
+          <select id="platform">
+            <option>Twitter / X</option>
+            <option>Facebook</option>
+            <option>Instagram</option>
+            <option>LinkedIn</option>
+          </select>
+        </div>
+
+        <div style="margin-top:12px">
+          <label>Isi Post</label>
+          <textarea id="postText" placeholder="Tulis caption atau isi posting... (supports URLs)"></textarea>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+            <input id="imageUrl" type="text" placeholder="URL gambar (opsional)" />
+            <div class="small" id="charCount">0 karakter</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label>Jadwalkan</label>
+          <input id="publishAt" type="datetime-local" />
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button id="scheduleBtn" class="btn">Jadwalkan Post</button>
+          <button id="postNowBtn" class="btn-ghost">Posting Sekarang (Simulasi)</button>
+        </div>
+      </section>
+
+      <!-- Main: Queue -->
+      <section class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div>
+            <strong>Queue / Jadwal</strong>
+            <div class="small">Posting yang sudah dijadwalkan (disimpan di browser)</div>
+          </div>
+          <div class="right">
+            <button id="exportCsv" class="btn-ghost">Ekspor CSV</button>
+            <button id="clearAll" class="btn-ghost">Hapus Semua</button>
+          </div>
+        </div>
+
+        <div id="queue" class="queue-list">
+          <!-- daftar posting -->
+        </div>
+
+      </section>
+    </div>
+
+    <footer>
+      Gunakan untuk merencanakan konten. Untuk posting nyata, integrasikan API resmi platform dengan kredensial Anda.
+    </footer>
+  </div>
+
+<script>
+(function(){
+  // Data keys
+  const ACC_KEY = 'scheduler_accounts_v1';
+  const QUEUE_KEY = 'scheduler_queue_v1';
+
+  // DOM
+  const accountsEl = document.getElementById('accounts');
+  const newAccountName = document.getElementById('newAccountName');
+  const addAccount = document.getElementById('addAccount');
+  const platformEl = document.getElementById('platform');
+  const postText = document.getElementById('postText');
+  const imageUrl = document.getElementById('imageUrl');
+  const publishAt = document.getElementById('publishAt');
+  const scheduleBtn = document.getElementById('scheduleBtn');
+  const postNowBtn = document.getElementById('postNowBtn');
+  const queueEl = document.getElementById('queue');
+  const charCount = document.getElementById('charCount');
+  const exportCsvBtn = document.getElementById('exportCsv');
+  const clearAllBtn = document.getElementById('clearAll');
+
+  // State
+  let accounts = JSON.parse(localStorage.getItem(ACC_KEY) || '["@akun_sample"]');
+  let queue = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+  let selectedAccount = accounts[0] || null;
+
+  // Helpers
+  const saveAccounts = ()=> localStorage.setItem(ACC_KEY, JSON.stringify(accounts));
+  const saveQueue = ()=> localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  const fmtDate = iso => {
+    const d = new Date(iso);
+    if (isNaN(d)) return '-';
+    return d.toLocaleString();
+  };
+  const uid = ()=> 'id_' + Math.random().toString(36).slice(2,9);
+
+  // Render accounts
+  function renderAccounts(){
+    accountsEl.innerHTML = '';
+    accounts.forEach(a=>{
+      const b = document.createElement('div');
+      b.className = 'acct';
+      b.textContent = a + (a===selectedAccount ? ' ✓' : '');
+      b.style.cursor = 'pointer';
+      b.onclick = ()=>{ selectedAccount = a; renderAccounts(); };
+      accountsEl.appendChild(b);
+    });
+  }
+
+  // Render queue
+  function renderQueue(){
+    queueEl.innerHTML = '';
+    if(queue.length === 0){
+      queueEl.innerHTML = '<div class="small">Belum ada posting terjadwal.</div>';
+      return;
+    }
+    // sort by publishAt ascending
+    const sorted = queue.slice().sort((a,b)=> new Date(a.publishAt) - new Date(b.publishAt));
+    sorted.forEach(item=>{
+      const box = document.createElement('div'); box.className='post-item';
+      const left = document.createElement('div'); left.className='post-meta';
+      const right = document.createElement('div'); right.className='post-controls';
+
+      left.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+          <div>
+            <div style="font-weight:600">${escapeHtml(item.platform)} • ${escapeHtml(item.account)}</div>
+            <div style="color:var(--muted);margin-top:6px;white-space:pre-wrap">${escapeHtml(item.text)}</div>
+            ${item.image ? `<div style="margin-top:8px"><img src="${escapeHtml(item.image)}" alt="" style="max-width:200px;border-radius:8px;border:1px solid #eef4fb"/></div>` : ''}
+          </div>
+          <div style="min-width:120px;text-align:right">
+            <div class="chip">${item.status}</div>
+            <div style="margin-top:6px;color:var(--muted);font-size:13px">${fmtDate(item.publishAt)}</div>
+          </div>
+        </div>
+      `;
+
+      const sendBtn = document.createElement('button'); sendBtn.className='btn-ghost'; sendBtn.textContent = 'Mark Terkirim';
+      sendBtn.onclick = ()=> { markSent(item.id); };
+
+      const editBtn = document.createElement('button'); editBtn.className='btn-ghost'; editBtn.textContent = 'Edit';
+      editBtn.onclick = ()=> { openEdit(item.id); };
+
+      const delBtn = document.createElement('button'); delBtn.className='btn-ghost'; delBtn.textContent = 'Hapus';
+      delBtn.onclick = ()=> { if(confirm('Hapus posting ini?')){ removeItem(item.id); } };
+
+      right.appendChild(sendBtn); right.appendChild(editBtn); right.appendChild(delBtn);
+
+      box.appendChild(left); box.appendChild(right);
+      queueEl.appendChild(box);
+    });
+  }
+
+  // Escape for safety
+  function escapeHtml(s){ return String(s || '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  // Actions
+  addAccount.addEventListener('click', ()=>{
+    const v = (newAccountName.value || '').trim();
+    if(!v){ alert('Isi nama akun terlebih dahulu.'); return; }
+    if(accounts.includes(v)){ alert('Akun sudah ada.'); return; }
+    accounts.push(v); selectedAccount = v; saveAccounts(); newAccountName.value=''; renderAccounts();
+  });
+
+  postText.addEventListener('input', ()=>{ charCount.textContent = postText.value.length + ' karakter'; });
+
+  scheduleBtn.addEventListener('click', ()=>{
+    if(!selectedAccount){ alert('Pilih akun dulu (atau tambah akun).'); return; }
+    const text = postText.value.trim();
+    if(!text){ alert('Isi teks posting.'); return; }
+    const when = publishAt.value;
+    if(!when){ alert('Pilih waktu jadwal (publishAt).'); return; }
+    const item = {
+      id: uid(),
+      account: selectedAccount,
+      platform: platformEl.value,
+      text: text,
+      image: (imageUrl.value || '').trim(),
+      publishAt: new Date(when).toISOString(),
+      status: 'Terjadwal',
+      createdAt: new Date().toISOString()
+    };
+    queue.push(item); saveQueue(); renderQueue();
+    // clear form but keep account selected
+    postText.value=''; imageUrl.value=''; publishAt.value='';
+    charCount.textContent = '0 karakter';
+    alert('Posting dijadwalkan (demo).');
+  });
+
+  postNowBtn.addEventListener('click', ()=>{
+    if(!selectedAccount){ alert('Pilih akun dulu (atau tambah akun).'); return; }
+    const text = postText.value.trim();
+    if(!text){ alert('Isi teks posting.'); return; }
+    const item = {
+      id: uid(),
+      account: selectedAccount,
+      platform: platformEl.value,
+      text: text,
+      image: (imageUrl.value || '').trim(),
+      publishAt: new Date().toISOString(),
+      status: 'Terkirim (Simulasi)',
+      createdAt: new Date().toISOString()
+    };
+    queue.push(item); saveQueue(); renderQueue();
+    postText.value=''; imageUrl.value=''; publishAt.value=''; charCount.textContent='0 karakter';
+    alert('Posting ditandai sebagai terkirim (simulasi). Untuk posting nyata, integrasikan API resmi platform.');
+  });
+
+  // Mark as sent
+  function markSent(id){
+    const idx = queue.findIndex(x=>x.id===id); if(idx===-1) return;
+    queue[idx].status = 'Terkirim (Manual)';
+    saveQueue(); renderQueue();
+  }
+
+  // Remove
+  function removeItem(id){
+    queue = queue.filter(x=>x.id!==id); saveQueue(); renderQueue();
+  }
+
+  // Edit - simple: populate composer and remove original
+  function openEdit(id){
+    const it = queue.find(x=>x.id===id); if(!it) return;
+    // populate
+    selectedAccount = it.account;
+    renderAccounts();
+    platformEl.value = it.platform;
+    postText.value = it.text;
+    imageUrl.value = it.image || '';
+    // convert publishAt to local datetime-local string
+    const d = new Date(it.publishAt);
+    if(!isNaN(d)){
+      const tzOffset = d.getTimezoneOffset() * 60000;
+      const localISO = new Date(d - tzOffset).toISOString().slice(0,16);
+      publishAt.value = localISO;
+    } else publishAt.value = '';
+    // remove old
+    removeItem(id);
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  // Export CSV
+  exportCsvBtn.addEventListener('click', ()=>{
+    if(queue.length === 0){ alert('Tidak ada data untuk diekspor.'); return; }
+    const header = ['id','account','platform','text','image','publishAt','status','createdAt'];
+    const rows = queue.map(it => header.map(h => '"' + String(it[h]||'').replace(/"/g,'""') + '"').join(','));
+    const csv = [header.join(','), ...rows].join('\\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'scheduler_queue.csv'; document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  clearAllBtn.addEventListener('click', ()=>{
+    if(!confirm('Hapus semua jadwal dan histori?')) return;
+    queue = []; saveQueue(); renderQueue();
+  });
+
+  // Initial render
+  renderAccounts();
+  renderQueue();
+
+  // Optional: auto-update statuses for items whose publishAt <= now (simulated delivery).
+  setInterval(()=>{
+    const now = new Date();
+    let changed = false;
+    queue.forEach(q=>{
+      if(q.status === 'Terjadwal' && new Date(q.publishAt) <= now){
+        q.status = 'Terkirim (Auto-sim)';
+        changed = true;
+      }
+    });
+    if(changed){ saveQueue(); renderQueue(); }
+  }, 20_000); // check tiap 20 detik
+
+})();
+</script>
+</body>
+</html>
